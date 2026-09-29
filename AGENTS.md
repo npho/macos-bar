@@ -55,8 +55,8 @@ Run `swift build` after every Swift change to ensure compilation. Verify UI beha
 
 All contributors and assistants must adhere to the following git conventions:
 - **Modular commits**: Commit distinct, logical changes independently (e.g. separate data model updates from UI or build script changes).
-- **Concise commit titles**: Use imperative, descriptive commit subject lines (maximum 72 characters).
-- **Bullet-point brevity**: Use bulleted lists in the commit message body summarizing:
+- **Plain, concise commit titles**: Use a brief sentence or imperative subject line (maximum 72 characters) summarizing the changes without any type prefixes or classification tags (do not use "feat:", "fix:", "docs:", "refactor:", "chore:", etc.).
+- **Complete-sentence bullet points**: Use bulleted lists in the commit message body where each bullet point is a complete, well-formed sentence ending with a period. Summarize:
   - What was added, changed, or removed.
   - Technical rationale or platform context.
   - Sufficient detail for subsequent contributors or assistants to understand and continue the work.
