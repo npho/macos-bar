@@ -2,48 +2,62 @@
 
 ## Project
 
-`MenuBarGroups` is a small macOS AppKit prototype built with Swift Package Manager. It is intentionally dependency-free and targets macOS 14 or later.
+`MenuBarGroups` is a native macOS menu-bar management utility built with Swift Package Manager. It is dependency-free and targets modern macOS (macOS 14 and later, including macOS 27).
 
-The current code is a popup proof of concept: each process owns one shortcut group, and the popup lets users add visible third-party status-item windows to a saved list with owning-app icon placeholders and opt-in click-through. A OneDrive-only spacer experiment was attempted on macOS 27; it failed to hide OneDrive and the app crashed afterward. The current UI pauses that experiment. Do not expose or retry the spacer path without an explicit safety review and recovery plan. The product direction is a custom popup-based menu-bar manager, with storage-provider groupings as an initial use case. See `docs/menu-bar-manager.md` for stages and platform constraints.
+The application provides a modern, open-source alternative to Bartender 7:
+- Multi-group menu bar management (e.g. Storage, Utilities, Media) directly in `NSStatusBar`.
+- Floating native secondary sub-bar (`SecondaryBarWindow`) positioned beneath active group icons.
+- Keyboard-first Command Bar (`CommandBarWindow`) summoned globally via `⌘ + Shift + Space`.
+- Universal status item discovery across CoreGraphics and Accessibility (`AXExtrasMenuBar`).
+- In-process group coordination and native settings management (`SettingsWindowController`).
 
 ## Useful commands
 
 ```sh
 swift build                         # Debug build
-swift run                           # Run the debug executable
+swift run                           # Run debug executable
 scripts/build-app.sh                # Build .build/MenuBarGroups.app
-MENU_BAR_GROUPS_SIGN_IDENTITY="<Apple Development identity>" scripts/build-app.sh  # Stable TCC identity
-open -n .build/MenuBarGroups.app    # Start another app-bundle instance
-pkill -f MenuBarGroups              # Stop prototype instances
+MENU_BAR_GROUPS_SIGN_IDENTITY="<Apple Development identity>" scripts/build-app.sh  # Build with stable code signing
+open .build/MenuBarGroups.app       # Launch application bundle
+pkill -f MenuBarGroups              # Terminate running instances
 ```
 
-Run `swift build` after every Swift change. This project has no automated tests yet; verify the UI manually on an interactive macOS desktop.
+Run `swift build` after every Swift change to ensure compilation. Verify UI behavior on an interactive macOS desktop.
 
 ## Code layout
 
-- `Sources/MenuBarGroups/main.swift` — application entry point, AppKit UI, drag/drop, persistence, and process spawning.
-- `Sources/MenuBarGroups/MenuBarItems.swift` — status-item discovery (Core Graphics, with a OneDrive Accessibility fallback), capture, and opt-in click-through.
-- The unsuccessful OneDrive-only positioning spike was removed from the source tree; do not restore it without the safety review described above.
-- `Package.swift` — Swift package configuration.
-- `Info.plist` — app-bundle metadata. `LSUIElement` makes it a menu-bar utility and `LSMultipleInstancesProhibited` must remain `false`.
-- `scripts/build-app.sh` — produces the local `.app` bundle; set `MENU_BAR_GROUPS_SIGN_IDENTITY` to a stable Apple Development certificate when testing Device Control/Accessibility access across builds. Rebuilding without it changes the app's signing identity and may invalidate macOS privacy grants.
+- `Sources/MenuBarGroups/main.swift` — Application entry point, `NSApplication` setup, and AppKit lifecycle.
+- `Sources/MenuBarGroups/Models.swift` — Core data structures (`MenuBarItem`, `MenuBarGroup`, `KnownApps`).
+- `Sources/MenuBarGroups/Scanner.swift` — Unified discovery engine querying CoreGraphics status windows and Accessibility `AXExtrasMenuBar`.
+- `Sources/MenuBarGroups/InteractionEngine.swift` — Action dispatch via `kAXPressAction` or targeted `CGEvent` mouse clicks with pre-flight bounds validation.
+- `Sources/MenuBarGroups/IconManager.swift` — High-resolution Retina icon caching with optional ScreenCaptureKit snapshotting and app icon fallbacks.
+- `Sources/MenuBarGroups/SecondaryBarWindow.swift` — Floating vibrancy `NSPanel` rendering the sub-bar beneath status items.
+- `Sources/MenuBarGroups/CommandBarWindow.swift` — Spotlight/Raycast-style search palette with keyboard navigation.
+- `Sources/MenuBarGroups/HotKeyManager.swift` — Carbon `RegisterEventHotKey` global hotkey management.
+- `Sources/MenuBarGroups/GroupManager.swift` — Central in-process coordinator for groups, persistence (`UserDefaults`), and `NSStatusItem` instances.
+- `Sources/MenuBarGroups/SettingsWindow.swift` — Preferences window for group configuration, item assignments, Launch at Login (`SMAppService`), and permission tracking.
+- `Package.swift` — Swift Package Manager specification.
+- `Info.plist` — Application bundle metadata (`LSUIElement` enabled).
+- `scripts/build-app.sh` — App bundle packaging script with optional code signing.
 
-## Implementation notes
+## Implementation conventions
 
-- `MenuBarGroupsMain` explicitly creates `NSApplication`, installs `AppDelegate`, and enters `app.run()`. Do not replace it with a bare process entry point: AppKit lifecycle callbacks and status items require the application run loop.
-- AppKit state is `@MainActor`; keep UI work on the main actor.
-- A group ID arrives as `--group <UUID>`. Without the argument it uses `default`, so saved selections survive relaunch. Its `UserDefaults` suite is `com.example.MenuBarGroups.<groupID>`.
-- **New Group** launches a second process with a new ID. Do not change this to a single-instance activation flow.
-- The temporary welcome window is a visual launch confirmation. Closing it must not terminate the status-item application.
+- **AppKit & Concurrency**: The application state is `@MainActor`. UI updates, status item manipulation, and window management must remain on the main actor.
+- **Process Model**: Single-process architecture. All groups, windows, and status items run within one lightweight process managed by `GroupManager.shared`.
+- **Platform Boundaries**: AppKit cannot transfer ownership of or reparent another application's `NSStatusItem`. The app organizes and proxies interactions rather than adopting foreign items.
+- **Permissions**:
+  - Accessibility is used for `AXExtrasMenuBar` item inspection and `kAXPressAction` execution.
+  - Screen Recording is purely optional for live Retina icon snapshots via ScreenCaptureKit.
+  - Carbon `RegisterEventHotKey` is used for global hotkeys without requiring input monitoring permissions.
+- **Documentation**: Update `README.md` whenever user-visible behavior, setup, or platform constraints change.
 
-## Platform boundary and permissions
+## Version control and commit standards
 
-AppKit cannot transfer ownership of, reparent, or nest another process's `NSStatusItem` in our popup. The new goal is to **visually organize and reveal** existing items, not claim ownership of them. Accessibility and screen capture may be investigated and implemented with explicit, informed user consent, minimal scope, and a useful permission-denied fallback. Document what each permission enables; do not silently request either. Prefer public APIs and reversible behavior; do not use private APIs, process injection, or undocumented cross-process manipulation without an explicit design review and user approval. No claims of App Store eligibility without checking the actual implementation. See `docs/menu-bar-manager.md`.
-
-The discovery/click-through preview is not consolidation; the OneDrive spacer experiment is paused after failure and a crash, and must not be re-enabled casually. Click-through is only for verified, visible windows after temporary reveal. Never click a hidden item's old coordinates. The OneDrive-only ScreenCaptureKit action captures a single still image with explicit consent, not a live status item. Do not mistake other owning-app icons for live menu-bar icons or local disk usage for cloud quota.
-
-## Editing conventions
-
-- Keep the app native AppKit unless a change has a clear reason to introduce another framework.
-- Prefer small, focused changes. Preserve the prototype's multi-instance behavior until the manager lifecycle is deliberately redesigned; a future manager may be single-instance.
-- Update `README.md` whenever user-visible behavior, setup, or platform constraints change.
+All contributors and assistants must adhere to the following git conventions:
+- **Modular commits**: Commit distinct, logical changes independently (e.g. separate data model updates from UI or build script changes).
+- **Concise commit titles**: Use imperative, descriptive commit subject lines (maximum 72 characters).
+- **Bullet-point brevity**: Use bulleted lists in the commit message body summarizing:
+  - What was added, changed, or removed.
+  - Technical rationale or platform context.
+  - Sufficient detail for subsequent contributors or assistants to understand and continue the work.
+- **No AI attribution**: Commit messages, PR descriptions, and code comments must contain no AI-generated badges, co-author attribution tags, or disclaimers.
