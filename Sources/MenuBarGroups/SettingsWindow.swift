@@ -253,16 +253,22 @@ public final class SettingsWindowController: NSWindowController, NSTableViewData
         updateAddItemPopUp()
     }
 
+    private var selectedGroupItems: [MenuBarItem] {
+        guard let group = selectedGroup else { return [] }
+        return GroupManager.shared.resolvedItems(for: group, allScanned: allScannedItems)
+    }
+
     private func updateAddItemPopUp() {
         addItemPopUp.removeAllItems()
         addItemPopUp.addItem(withTitle: "Add item to this group…")
 
-        guard let group = selectedGroup else {
+        guard selectedGroup != nil else {
             addItemPopUp.isEnabled = false
             return
         }
 
-        availableItems = allScannedItems.filter { !group.itemIDs.contains($0.id) }
+        let currentIDs = Set(selectedGroupItems.map(\.id))
+        availableItems = allScannedItems.filter { !currentIDs.contains($0.id) }
         addItemPopUp.isEnabled = !availableItems.isEmpty
 
         for item in availableItems {
@@ -311,7 +317,7 @@ public final class SettingsWindowController: NSWindowController, NSTableViewData
         if tableView === groupTableView {
             return GroupManager.shared.groups.count
         } else {
-            return selectedGroup?.itemIDs.count ?? 0
+            return selectedGroupItems.count
         }
     }
 
@@ -328,16 +334,16 @@ public final class SettingsWindowController: NSWindowController, NSTableViewData
             ])
             return cell
         } else {
-            guard let group = selectedGroup, group.itemIDs.indices.contains(row) else { return nil }
-            let itemID = group.itemIDs[row]
-            let item = allScannedItems.first(where: { $0.id == itemID })
+            let items = selectedGroupItems
+            guard items.indices.contains(row) else { return nil }
+            let item = items[row]
 
             let cell = NSTableCellView()
             let iconView = NSImageView()
-            iconView.image = item.flatMap { IconManager.shared.icon(for: $0) } ?? NSImage(systemSymbolName: "questionmark.square", accessibilityDescription: nil)
+            iconView.image = IconManager.shared.icon(for: item)
             iconView.translatesAutoresizingMaskIntoConstraints = false
 
-            let label = NSTextField(labelWithString: item?.name ?? itemID)
+            let label = NSTextField(labelWithString: item.name + (item.ordinal > 0 ? " (\(item.ordinal + 1))" : ""))
             label.translatesAutoresizingMaskIntoConstraints = false
 
             let removeButton = NSButton(title: "×", target: self, action: #selector(removeItemFromGroup(_:)))
@@ -373,9 +379,11 @@ public final class SettingsWindowController: NSWindowController, NSTableViewData
     }
 
     @objc private func removeItemFromGroup(_ sender: NSButton) {
-        guard let group = selectedGroup, group.itemIDs.indices.contains(sender.tag) else { return }
-        let itemID = group.itemIDs[sender.tag]
-        GroupManager.shared.removeItem(itemID, fromGroupID: group.id)
+        guard let group = selectedGroup else { return }
+        let items = selectedGroupItems
+        guard items.indices.contains(sender.tag) else { return }
+        let item = items[sender.tag]
+        GroupManager.shared.removeItem(item.id, fromGroupID: group.id)
         refreshData()
     }
 }

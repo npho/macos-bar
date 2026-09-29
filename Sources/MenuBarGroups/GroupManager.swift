@@ -33,8 +33,13 @@ public final class GroupManager {
         if let data = UserDefaults.standard.data(forKey: defaultsKey),
            let saved = try? JSONDecoder().decode([MenuBarGroup].self, from: data) {
             groups = saved
+            // Auto-upgrade legacy storage group to auto-track if needed
+            for i in groups.indices {
+                if groups[i].title.localizedCaseInsensitiveContains("storage") && groups[i].autoTrackCategory == .none {
+                    groups[i].autoTrackCategory = .storage
+                }
+            }
         } else {
-            // First run: provision smart default groups
             provisionDefaultGroups()
         }
     }
@@ -47,29 +52,50 @@ public final class GroupManager {
     }
 
     private func provisionDefaultGroups() {
-        let scanned = MenuBarScanner.shared.scan()
-        var storageItemIDs: [String] = []
-
-        for item in scanned {
-            if KnownApps.isStorageApp(bundleID: item.bundleIdentifier, name: item.name) {
-                storageItemIDs.append(item.id)
-            }
-        }
-
         let storageGroup = MenuBarGroup(
             title: "Storage",
             symbolName: "externaldrive.connected.to.line.below.fill",
-            itemIDs: storageItemIDs
+            itemIDs: [],
+            autoTrackCategory: .storage
         )
 
         let utilitiesGroup = MenuBarGroup(
             title: "Utilities",
             symbolName: "slider.horizontal.3",
-            itemIDs: []
+            itemIDs: [],
+            autoTrackCategory: .none
         )
 
         groups = [storageGroup, utilitiesGroup]
         saveGroups()
+    }
+
+    // MARK: - Item Resolution
+
+    /// Resolves all items belonging to a group, taking auto-tracking into account.
+    public func resolvedItems(for group: MenuBarGroup, allScanned: [MenuBarItem]) -> [MenuBarItem] {
+        var items: [MenuBarItem] = []
+        var seenIDs = Set<String>()
+
+        // 1. Auto-tracked items
+        if group.autoTrackCategory == .storage {
+            for item in allScanned {
+                if KnownApps.isStorageApp(bundleID: item.bundleIdentifier, name: item.name) {
+                    items.append(item)
+                    seenIDs.insert(item.id)
+                }
+            }
+        }
+
+        // 2. Manually assigned items
+        for itemID in group.itemIDs {
+            if !seenIDs.contains(itemID), let item = allScanned.first(where: { $0.id == itemID }) {
+                items.append(item)
+                seenIDs.insert(itemID)
+            }
+        }
+
+        return items
     }
 
     // MARK: - Menu Bar Status Items
@@ -101,6 +127,10 @@ public final class GroupManager {
 
         menu.addItem(NSMenuItem.separator())
 
+        let newGroupItem = NSMenuItem(title: "Create New Group…", action: #selector(promptNewGroup), keyEquivalent: "n")
+        newGroupItem.target = self
+        menu.addItem(newGroupItem)
+
         let settingsItem = NSMenuItem(title: "Manage Groups…", action: #selector(openSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
@@ -113,7 +143,7 @@ public final class GroupManager {
 
         mainStatusItem?.menu = menu
         mainStatusItem?.button?.performClick(nil)
-        mainStatusItem?.menu = nil // Restore toggle behavior
+        mainStatusItem?.menu = nil
     }
 
     @objc private func openCommandBar() {
@@ -136,14 +166,12 @@ public final class GroupManager {
     // MARK: - Individual Group Status Items
 
     private func setupGroupStatusItems() {
-        // Remove obsolete status items
         let activeIDs = Set(groups.map(\.id))
         for (id, item) in groupStatusItems where !activeIDs.contains(id) {
             NSStatusBar.system.removeStatusItem(item)
             groupStatusItems.removeValue(forKey: id)
         }
 
-        // Add or update status items for each group
         for group in groups {
             let statusItem = groupStatusItems[group.id] ?? NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
             groupStatusItems[group.id] = statusItem
@@ -153,8 +181,9 @@ public final class GroupManager {
             button.image = NSImage(systemSymbolName: group.symbolName, accessibilityDescription: group.title)?.withSymbolConfiguration(config)
             button.imagePosition = .imageLeading
             button.title = " \(group.title)"
-            button.toolTip = "\(group.title) Group"
+            button.toolTip = "\(group.title) (Click to show items, right-click for options)"
 
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             objc_setAssociatedObject(button, "groupID", group.id, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
             button.target = self
             button.action = #selector(groupButtonClicked(_:))
@@ -165,18 +194,130 @@ public final class GroupManager {
         guard let groupID = objc_getAssociatedObject(sender, "groupID") as? UUID,
               let group = groups.first(where: { $0.id == groupID }) else { return }
 
+        let currentEvent = NSApp.currentEvent
+        if currentEvent?.type == .rightMouseUp || (currentEvent?.modifierFlags.contains(.control) ?? false) {
+            // Secondary-click context menu
+            showGroupContextMenu(for: group, in: sender)
+            return
+        }
+
         if secondaryBar.isVisible {
             secondaryBar.orderOut(nil)
             return
         }
 
-        let allScanned = MenuBarScanner.shared.scan()
-        let matchingItems = allScanned.filter { group.itemIDs.contains($0.id) }
+        displaySecondaryBar(for: group, beneath: sender)
+    }
 
-        secondaryBar.update(items: matchingItems) { selectedItem in
-            InteractionEngine.shared.activate(item: selectedItem)
+    private func displaySecondaryBar(for group: MenuBarGroup, beneath button: NSStatusBarButton) {
+        let allScanned = MenuBarScanner.shared.scan()
+        let matchingItems = resolvedItems(for: group, allScanned: allScanned)
+
+        secondaryBar.update(
+            group: group,
+            items: matchingItems,
+            allAvailableItems: allScanned,
+            onSelect: { selectedItem in
+                InteractionEngine.shared.activate(item: selectedItem)
+            },
+            onToggleItem: { [weak self, weak button] itemID in
+                guard let self, let button else { return }
+                self.toggleItem(itemID, inGroupID: group.id)
+                if let updatedGroup = self.groups.first(where: { $0.id == group.id }) {
+                    self.displaySecondaryBar(for: updatedGroup, beneath: button)
+                }
+            },
+            onRenameGroup: { [weak self] in
+                self?.promptRenameGroup(id: group.id)
+            },
+            onDeleteGroup: { [weak self] in
+                self?.removeGroup(id: group.id)
+            },
+            onNewGroup: { [weak self] in
+                self?.promptNewGroup()
+            }
+        )
+        secondaryBar.show(beneath: button)
+    }
+
+    private func showGroupContextMenu(for group: MenuBarGroup, in button: NSStatusBarButton) {
+        let menu = NSMenu(title: group.title)
+
+        let titleItem = NSMenuItem(title: "\(group.title) Group", action: nil, keyEquivalent: "")
+        titleItem.isEnabled = false
+        menu.addItem(titleItem)
+        menu.addItem(NSMenuItem.separator())
+
+        let renameItem = NSMenuItem(title: "Rename Group…", action: #selector(contextRenameClicked(_:)), keyEquivalent: "")
+        renameItem.target = self
+        objc_setAssociatedObject(renameItem, "groupID", group.id, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        menu.addItem(renameItem)
+
+        let newGroupItem = NSMenuItem(title: "Create New Group…", action: #selector(promptNewGroup), keyEquivalent: "")
+        newGroupItem.target = self
+        menu.addItem(newGroupItem)
+
+        let deleteItem = NSMenuItem(title: "Delete Group", action: #selector(contextDeleteClicked(_:)), keyEquivalent: "")
+        deleteItem.target = self
+        objc_setAssociatedObject(deleteItem, "groupID", group.id, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        menu.addItem(deleteItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let settingsItem = NSMenuItem(title: "Manage All Groups…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 2), in: button)
+    }
+
+    @objc private func contextRenameClicked(_ sender: NSMenuItem) {
+        guard let groupID = objc_getAssociatedObject(sender, "groupID") as? UUID else { return }
+        promptRenameGroup(id: groupID)
+    }
+
+    @objc private func contextDeleteClicked(_ sender: NSMenuItem) {
+        guard let groupID = objc_getAssociatedObject(sender, "groupID") as? UUID else { return }
+        removeGroup(id: groupID)
+    }
+
+    // MARK: - Interactive Dialogs
+
+    public func promptRenameGroup(id: UUID) {
+        guard let group = groups.first(where: { $0.id == id }) else { return }
+        let alert = NSAlert()
+        alert.messageText = "Rename Group"
+        alert.informativeText = "Enter a new label for “\(group.title)”:"
+        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: "Cancel")
+
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
+        input.stringValue = group.title
+        alert.accessoryView = input
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let newName = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !newName.isEmpty {
+            renameGroup(id: id, newTitle: newName)
         }
-        secondaryBar.show(beneath: sender)
+    }
+
+    @objc public func promptNewGroup() {
+        let alert = NSAlert()
+        alert.messageText = "Create New Menu Bar Group"
+        alert.informativeText = "Enter a label for the new group (e.g. Media, Network, Dev):"
+        alert.addButton(withTitle: "Create")
+        alert.addButton(withTitle: "Cancel")
+
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
+        input.stringValue = "New Group"
+        alert.accessoryView = input
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let name = input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty {
+            addGroup(title: name, symbolName: "folder.fill")
+        }
     }
 
     // MARK: - Group Mutation API
@@ -187,8 +328,24 @@ public final class GroupManager {
         saveGroups()
     }
 
+    public func renameGroup(id: UUID, newTitle: String) {
+        guard let index = groups.firstIndex(where: { $0.id == id }) else { return }
+        groups[index].title = newTitle
+        saveGroups()
+    }
+
     public func removeGroup(id: UUID) {
         groups.removeAll { $0.id == id }
+        saveGroups()
+    }
+
+    public func toggleItem(_ itemID: String, inGroupID groupID: UUID) {
+        guard let index = groups.firstIndex(where: { $0.id == groupID }) else { return }
+        if groups[index].itemIDs.contains(itemID) {
+            groups[index].itemIDs.removeAll { $0 == itemID }
+        } else {
+            groups[index].itemIDs.append(itemID)
+        }
         saveGroups()
     }
 

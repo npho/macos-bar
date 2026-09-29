@@ -36,12 +36,19 @@ public struct MenuBarItem: Identifiable, Sendable {
     }
 }
 
+/// Category for automatic dynamic item tracking.
+public enum AutoTrackCategory: String, Codable, Sendable {
+    case none
+    case storage
+}
+
 /// A user-defined group of menu bar items (e.g. "Storage", "Utilities", "Hidden").
 public struct MenuBarGroup: Codable, Identifiable, Equatable {
     public let id: UUID
     public var title: String
     public var symbolName: String
     public var itemIDs: [String] // Matched against MenuBarItem.id
+    public var autoTrackCategory: AutoTrackCategory
     public var hideWhenInactive: Bool
 
     public init(
@@ -49,12 +56,14 @@ public struct MenuBarGroup: Codable, Identifiable, Equatable {
         title: String,
         symbolName: String,
         itemIDs: [String] = [],
+        autoTrackCategory: AutoTrackCategory = .none,
         hideWhenInactive: Bool = false
     ) {
         self.id = id
         self.title = title
         self.symbolName = symbolName
         self.itemIDs = itemIDs
+        self.autoTrackCategory = autoTrackCategory
         self.hideWhenInactive = hideWhenInactive
     }
 }
@@ -68,6 +77,7 @@ public enum KnownApps {
         "com.google.GoogleDrive",
         "ch.protonmail.drive",
         "com.synology.CloudStationBackup",
+        "com.synology.CloudStationUI",
         "com.synology.SynologyDrive",
         "com.box.desktop",
         "com.nextcloud.desktopclient",
@@ -84,6 +94,7 @@ public enum KnownApps {
         let lower = name.lowercased()
         return lower.contains("onedrive") || lower.contains("dropbox") || lower.contains("google drive") ||
                lower.contains("proton drive") || lower.contains("synology") || lower.contains("nextcloud") ||
-               lower.contains("owncloud") || lower.contains("pcloud") || lower.contains("box")
+               lower.contains("owncloud") || lower.contains("pcloud") || lower.contains("box") ||
+               lower.contains("drive")
     }
 }
