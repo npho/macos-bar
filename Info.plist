@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleExecutable</key><string>MenuBarGroups</string>
+  <key>CFBundleIdentifier</key><string>com.example.MenuBarGroups</string>
+  <key>CFBundleName</key><string>Menu Bar Groups</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>0.1</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>NSScreenCaptureUsageDescription</key><string>Capture a selected OneDrive menu-bar icon so it can be previewed in the popup. Captures are kept in memory only.</string>
+  <key>LSUIElement</key><true/>
+  <key>LSMultipleInstancesProhibited</key><false/>
+</dict></plist>
