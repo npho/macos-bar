@@ -21,6 +21,7 @@ public final class GroupManager {
     public func start() {
         setupMainStatusItem()
         setupGroupStatusItems()
+        refreshConcealmentOverlays()
 
         // Register global hotkey for Command Bar (⌘⇧Space)
         HotKeyManager.shared.register {
@@ -49,6 +50,7 @@ public final class GroupManager {
             UserDefaults.standard.set(data, forKey: defaultsKey)
         }
         setupGroupStatusItems()
+        refreshConcealmentOverlays()
     }
 
     private func provisionDefaultGroups() {
@@ -118,6 +120,11 @@ public final class GroupManager {
         commandBarItem.target = self
         menu.addItem(commandBarItem)
 
+        let concealItem = NSMenuItem(title: "Conceal Grouped Menu Bar Icons", action: #selector(toggleConcealmentAction), keyEquivalent: "h")
+        concealItem.state = CurtainOverlayManager.shared.isEnabled ? .on : .off
+        concealItem.target = self
+        menu.addItem(concealItem)
+
         let refreshItem = NSMenuItem(title: "Refresh Menu Bar Items", action: #selector(refreshAll), keyEquivalent: "r")
         refreshItem.target = self
         menu.addItem(refreshItem)
@@ -143,13 +150,19 @@ public final class GroupManager {
         mainStatusItem?.menu = nil
     }
 
+    @objc private func toggleConcealmentAction() {
+        CurtainOverlayManager.shared.isEnabled.toggle()
+        refreshConcealmentOverlays()
+    }
+
     @objc private func openCommandBar() {
         CommandBarWindow.shared.show()
     }
 
-    @objc private func refreshAll() {
+    @objc public func refreshAll() {
         _ = MenuBarScanner.shared.scan()
         setupGroupStatusItems()
+        refreshConcealmentOverlays()
     }
 
     @objc private func openSettings() {
@@ -176,8 +189,8 @@ public final class GroupManager {
             guard let button = statusItem.button else { continue }
             let config = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
             button.image = NSImage(systemSymbolName: group.symbolName, accessibilityDescription: group.title)?.withSymbolConfiguration(config)
-            button.imagePosition = .imageLeading
-            button.title = " \(group.title)"
+            button.imagePosition = .imageOnly
+            button.title = ""
             button.toolTip = "\(group.title) (Click to show items, right-click for options)"
 
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -236,12 +249,48 @@ public final class GroupManager {
         secondaryBar.show(beneath: button)
     }
 
+    public func showSecondaryBar(forGroupID groupID: UUID) {
+        guard let group = groups.first(where: { $0.id == groupID }) else { return }
+        if let button = groupStatusItems[groupID]?.button {
+            displaySecondaryBar(for: group, beneath: button)
+        }
+    }
+
+    public func refreshConcealmentOverlays() {
+        guard CurtainOverlayManager.shared.isEnabled else {
+            CurtainOverlayManager.shared.removeAll()
+            return
+        }
+        let allScanned = MenuBarScanner.shared.scan()
+        CurtainOverlayManager.shared.update(
+            groups: groups,
+            scannedItems: allScanned,
+            onSummonGroup: { [weak self] groupID in
+                self?.showSecondaryBar(forGroupID: groupID)
+            },
+            onContextMenu: { [weak self] groupID, _ in
+                guard let self, let group = self.groups.first(where: { $0.id == groupID }) else { return }
+                if let button = self.groupStatusItems[groupID]?.button {
+                    self.showGroupContextMenu(for: group, in: button)
+                }
+            }
+        )
+    }
+
     private func showGroupContextMenu(for group: MenuBarGroup, in button: NSStatusBarButton) {
         let menu = NSMenu(title: group.title)
 
         let titleItem = NSMenuItem(title: "\(group.title) Group", action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
+        menu.addItem(NSMenuItem.separator())
+
+        let concealItem = NSMenuItem(title: "Conceal Icons in this Group", action: #selector(toggleGroupConcealClicked(_:)), keyEquivalent: "")
+        concealItem.state = group.concealItems ? .on : .off
+        concealItem.target = self
+        objc_setAssociatedObject(concealItem, "groupID", group.id, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        menu.addItem(concealItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let renameItem = NSMenuItem(title: "Rename Group…", action: #selector(contextRenameClicked(_:)), keyEquivalent: "")
@@ -265,6 +314,13 @@ public final class GroupManager {
         menu.addItem(settingsItem)
 
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 2), in: button)
+    }
+
+    @objc private func toggleGroupConcealClicked(_ sender: NSMenuItem) {
+        guard let groupID = objc_getAssociatedObject(sender, "groupID") as? UUID,
+              let index = groups.firstIndex(where: { $0.id == groupID }) else { return }
+        groups[index].concealItems.toggle()
+        saveGroups()
     }
 
     @objc private func contextRenameClicked(_ sender: NSMenuItem) {

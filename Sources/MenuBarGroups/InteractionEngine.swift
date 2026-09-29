@@ -27,6 +27,7 @@ public final class InteractionEngine {
         }
 
         // Fallback: Targeted CGEvent click at the verified current frame
+        CurtainOverlayManager.shared.temporarilyPassThroughEvents(duration: 0.35)
         return clickViaCGEvent(at: CGPoint(x: item.frame.midX, y: item.frame.midY))
     }
 

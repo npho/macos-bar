@@ -11,6 +11,7 @@ public final class SettingsWindowController: NSWindowController, NSTableViewData
     private let itemTableView = NSTableView()
     private let addItemPopUp = NSPopUpButton(frame: .zero, pullsDown: false)
     private let launchAtLoginCheckbox = NSButton(checkboxWithTitle: "Launch at login", target: nil, action: nil)
+    private let concealCheckbox = NSButton(checkboxWithTitle: "Conceal grouped items in menu bar (camouflages original icons)", target: nil, action: nil)
     private let accessibilityStatusLabel = NSTextField(labelWithString: "")
     private let screenRecordingStatusLabel = NSTextField(labelWithString: "")
 
@@ -168,6 +169,13 @@ public final class SettingsWindowController: NSWindowController, NSTableViewData
         launchAtLoginCheckbox.action = #selector(toggleLaunchAtLogin(_:))
         launchAtLoginCheckbox.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
 
+        let behaviorHeading = NSTextField(labelWithString: "Menu Bar Behavior")
+        behaviorHeading.font = .boldSystemFont(ofSize: 13)
+
+        concealCheckbox.target = self
+        concealCheckbox.action = #selector(toggleConcealmentSetting(_:))
+        concealCheckbox.state = CurtainOverlayManager.shared.isEnabled ? .on : .off
+
         let shortcutHeading = NSTextField(labelWithString: "Global Shortcuts")
         shortcutHeading.font = .boldSystemFont(ofSize: 13)
 
@@ -185,6 +193,8 @@ public final class SettingsWindowController: NSWindowController, NSTableViewData
 
         stack.addArrangedSubview(launchHeading)
         stack.addArrangedSubview(launchAtLoginCheckbox)
+        stack.addArrangedSubview(behaviorHeading)
+        stack.addArrangedSubview(concealCheckbox)
         stack.addArrangedSubview(shortcutHeading)
         stack.addArrangedSubview(shortcutLabel)
         stack.addArrangedSubview(permissionsHeading)
@@ -202,6 +212,11 @@ public final class SettingsWindowController: NSWindowController, NSTableViewData
 
         updatePermissionLabels()
         return view
+    }
+
+    @objc private func toggleConcealmentSetting(_ sender: NSButton) {
+        CurtainOverlayManager.shared.isEnabled = (sender.state == .on)
+        GroupManager.shared.refreshConcealmentOverlays()
     }
 
     private func updatePermissionLabels() {
@@ -247,6 +262,7 @@ public final class SettingsWindowController: NSWindowController, NSTableViewData
         if groupTableView.selectedRow < 0 && !GroupManager.shared.groups.isEmpty {
             groupTableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
         }
+        concealCheckbox.state = CurtainOverlayManager.shared.isEnabled ? .on : .off
         refreshItemsView()
         updatePermissionLabels()
     }

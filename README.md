@@ -7,6 +7,7 @@ An open-source macOS menu bar manager and organizer inspired by Bartender 7, tai
 ## Features
 
 - **Multi-Group Menu Bar Management**: Group related status items into customizable categories (e.g. *Storage*, *Utilities*, *Media*) with custom SF Symbols and titles.
+- **Native Concealment Overlay**: Automatically camouflages original menu bar icons for grouped items behind seamless system vibrancy masks (`CurtainOverlayWindow`), eliminating clutter from the main menu bar without relying on obsolete spacer tricks.
 - **Floating Secondary Sub-Bar**: Clicking any group's menu bar icon reveals a sleek, native vibrancy floating bar (`NSPanel`) displaying all grouped items directly underneath. Avoids MacBook notch clipping.
 - **Command Bar (Keyboard-First Search)**: Press **⌘ + Shift + Space** from anywhere in macOS to summon a Spotlight/Raycast-style Command Bar. Fuzzy-search through all active menu bar items and press `Enter` to open its native menu immediately.
 - **Universal Status Item Discovery**: Discovers both standard CoreGraphics status windows and modern sandboxed application items (`AXExtrasMenuBar`) across the entire operating system without hardcoding.
@@ -76,6 +77,7 @@ Menu Bar Groups respects macOS security and privacy boundaries:
 - **`Models.swift`**: Data definitions for `MenuBarItem`, `MenuBarGroup`, and smart app identifiers.
 - **`Scanner.swift`**: Unified scanner combining `CGWindowListCopyWindowInfo` and Accessibility `AXUIElement` (`AXExtrasMenuBar`).
 - **`InteractionEngine.swift`**: Dispatches click actions and menu activation via `kAXPressAction` or targeted `CGEvent` dispatch.
+- **`CurtainOverlay.swift`**: Borderless floating vibrancy masks (`CurtainOverlayWindow` and `CurtainOverlayManager`) concealing original status icons.
 - **`SecondaryBarWindow.swift`**: Floating `NSPanel` with `NSVisualEffectView` providing the sub-bar beneath clicked group status items.
 - **`CommandBarWindow.swift`**: Floating Spotlight-style fuzzy search palette.
 - **`HotKeyManager.swift`**: System-wide Carbon `RegisterEventHotKey` registration without requiring keylogger permissions.

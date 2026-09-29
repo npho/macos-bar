@@ -30,6 +30,7 @@ Run `swift build` after every Swift change to ensure compilation. Verify UI beha
 - `Sources/MenuBarGroups/Models.swift` — Core data structures (`MenuBarItem`, `MenuBarGroup`, `KnownApps`).
 - `Sources/MenuBarGroups/Scanner.swift` — Unified discovery engine querying CoreGraphics status windows and Accessibility `AXExtrasMenuBar`.
 - `Sources/MenuBarGroups/InteractionEngine.swift` — Action dispatch via `kAXPressAction` or targeted `CGEvent` mouse clicks with pre-flight bounds validation.
+- `Sources/MenuBarGroups/CurtainOverlay.swift` — Frameless native vibrancy overlay windows concealing grouped menu bar status items.
 - `Sources/MenuBarGroups/IconManager.swift` — High-resolution Retina icon caching with optional ScreenCaptureKit snapshotting and app icon fallbacks.
 - `Sources/MenuBarGroups/SecondaryBarWindow.swift` — Floating vibrancy `NSPanel` rendering the sub-bar beneath status items.
 - `Sources/MenuBarGroups/CommandBarWindow.swift` — Spotlight/Raycast-style search palette with keyboard navigation.

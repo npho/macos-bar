@@ -50,6 +50,11 @@ public struct MenuBarGroup: Codable, Identifiable, Equatable {
     public var itemIDs: [String] // Matched against MenuBarItem.id
     public var autoTrackCategory: AutoTrackCategory
     public var hideWhenInactive: Bool
+    public var concealItems: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, symbolName, itemIDs, autoTrackCategory, hideWhenInactive, concealItems
+    }
 
     public init(
         id: UUID = UUID(),
@@ -57,7 +62,8 @@ public struct MenuBarGroup: Codable, Identifiable, Equatable {
         symbolName: String,
         itemIDs: [String] = [],
         autoTrackCategory: AutoTrackCategory = .none,
-        hideWhenInactive: Bool = false
+        hideWhenInactive: Bool = false,
+        concealItems: Bool = true
     ) {
         self.id = id
         self.title = title
@@ -65,6 +71,29 @@ public struct MenuBarGroup: Codable, Identifiable, Equatable {
         self.itemIDs = itemIDs
         self.autoTrackCategory = autoTrackCategory
         self.hideWhenInactive = hideWhenInactive
+        self.concealItems = concealItems
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        symbolName = try container.decode(String.self, forKey: .symbolName)
+        itemIDs = try container.decode([String].self, forKey: .itemIDs)
+        autoTrackCategory = try container.decodeIfPresent(AutoTrackCategory.self, forKey: .autoTrackCategory) ?? .none
+        hideWhenInactive = try container.decodeIfPresent(Bool.self, forKey: .hideWhenInactive) ?? false
+        concealItems = try container.decodeIfPresent(Bool.self, forKey: .concealItems) ?? true
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(symbolName, forKey: .symbolName)
+        try container.encode(itemIDs, forKey: .itemIDs)
+        try container.encode(autoTrackCategory, forKey: .autoTrackCategory)
+        try container.encode(hideWhenInactive, forKey: .hideWhenInactive)
+        try container.encode(concealItems, forKey: .concealItems)
     }
 }
 
