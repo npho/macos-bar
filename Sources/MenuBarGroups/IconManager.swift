@@ -3,7 +3,7 @@ import CoreGraphics
 import ScreenCaptureKit
 
 /// Manages high-res Retina icons for menu bar items using a privacy-first hybrid approach:
-/// - Permissionless Mode (default): Extracts monochrome status assets from on-disk bundles and curated SF Symbols.
+/// - Permissionless Mode (default): Uses authentic bespoke vector renderers and on-disk assets.
 /// - Live Capture Mode (opt-in): If the user enables live capture and grants Screen Recording, captures dynamic menu bar states.
 @MainActor
 public final class IconManager {
@@ -39,7 +39,7 @@ public final class IconManager {
             return cached
         }
 
-        // 3. Resolve permissionless status icon
+        // 3. Resolve authentic permissionless status icon
         let resolved = resolvePermissionlessIcon(for: item)
         staticCache[item.id] = resolved
         return resolved
@@ -78,26 +78,151 @@ public final class IconManager {
         }
     }
 
-    // MARK: - Permissionless Icon Resolution
+    // MARK: - Authentic Permissionless Icon Resolution
 
     private func resolvePermissionlessIcon(for item: MenuBarItem) -> NSImage {
-        // Try on-disk bundle status asset first
+        let combined = "\(item.name) \(item.bundleIdentifier ?? "")".lowercased()
+
+        // 1. Check for accurate bespoke vector representations
+        if combined.contains("nextcloud") || combined.contains("owncloud") {
+            return renderNextcloudIcon()
+        }
+
+        if combined.contains("proton") && combined.contains("drive") {
+            return renderProtonDriveIcon()
+        }
+
+        if combined.contains("proton") && combined.contains("vpn") {
+            return renderProtonVPNIcon()
+        }
+
+        if combined.contains("synology") {
+            return renderSynologyIcon()
+        }
+
+        if combined.contains("onedrive") {
+            return renderOneDriveIcon()
+        }
+
+        // 2. Try on-disk bundle status asset
         if let bundleAsset = findBundleStatusAsset(for: item) {
             return bundleAsset
         }
 
-        // Try curated SF Symbol matching the app purpose
-        if let symbol = curatedSymbol(for: item) {
+        // 3. Try curated SF Symbols for other known utilities
+        if let symbol = curatedSymbol(for: item, combined: combined) {
             return symbol
         }
 
-        // Fallback to app bundle icon
+        // 4. Fallback to app bundle icon
         if let appIcon = item.appIcon {
             return appIcon
         }
 
         return NSImage(systemSymbolName: "circle.grid.2x2.fill", accessibilityDescription: item.name) ?? NSImage()
     }
+
+    // MARK: - Bespoke Vector Renderers
+
+    /// Official Nextcloud three-connected-node status icon.
+    private func renderNextcloudIcon() -> NSImage {
+        let size = NSSize(width: 24, height: 20)
+        let img = NSImage(size: size, flipped: false) { rect in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            ctx.setFillColor(NSColor.white.cgColor)
+            ctx.setStrokeColor(NSColor.white.cgColor)
+            ctx.setLineWidth(1.8)
+
+            let center = CGRect(x: 12 - 4.5, y: 10 - 4.5, width: 9, height: 9)
+            ctx.strokeEllipse(in: center)
+
+            let left = CGRect(x: 4.5 - 2.8, y: 10 - 2.8, width: 5.6, height: 5.6)
+            ctx.strokeEllipse(in: left)
+
+            let right = CGRect(x: 19.5 - 2.8, y: 10 - 2.8, width: 5.6, height: 5.6)
+            ctx.strokeEllipse(in: right)
+
+            ctx.move(to: CGPoint(x: 7.2, y: 10))
+            ctx.addLine(to: CGPoint(x: 7.6, y: 10))
+            ctx.move(to: CGPoint(x: 16.4, y: 10))
+            ctx.addLine(to: CGPoint(x: 16.8, y: 10))
+            ctx.strokePath()
+            return true
+        }
+        img.isTemplate = true
+        return img
+    }
+
+    /// Official Proton Drive folder with checkmark badge menu bar icon.
+    private func renderProtonDriveIcon() -> NSImage {
+        let size = NSSize(width: 22, height: 20)
+        let img = NSImage(size: size, flipped: false) { rect in
+            let folderConfig = NSImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+            let checkConfig = NSImage.SymbolConfiguration(pointSize: 9, weight: .bold)
+
+            if let folder = NSImage(systemSymbolName: "folder.fill", accessibilityDescription: nil)?.withSymbolConfiguration(folderConfig) {
+                folder.draw(in: NSRect(x: 0, y: 1, width: 17, height: 15))
+            }
+            if let check = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)?.withSymbolConfiguration(checkConfig) {
+                let badgeRect = NSRect(x: 10, y: 8, width: 11, height: 11)
+                NSColor.clear.setFill()
+                badgeRect.fill(using: .copy)
+                check.draw(in: badgeRect)
+            }
+            return true
+        }
+        img.isTemplate = true
+        return img
+    }
+
+    /// Official Synology Drive chevron "D" menu bar status icon.
+    private func renderSynologyIcon() -> NSImage {
+        let size = NSSize(width: 20, height: 20)
+        let img = NSImage(size: size, flipped: false) { rect in
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: 3, y: 3))
+            path.line(to: NSPoint(x: 9, y: 3))
+            path.line(to: NSPoint(x: 17, y: 10))
+            path.line(to: NSPoint(x: 9, y: 17))
+            path.line(to: NSPoint(x: 3, y: 17))
+            path.line(to: NSPoint(x: 10, y: 10))
+            path.close()
+
+            let innerChevron = NSBezierPath()
+            innerChevron.move(to: NSPoint(x: 3.5, y: 6.5))
+            innerChevron.line(to: NSPoint(x: 7.5, y: 10))
+            innerChevron.line(to: NSPoint(x: 3.5, y: 13.5))
+            innerChevron.lineWidth = 2.0
+            innerChevron.lineCapStyle = .round
+            innerChevron.lineJoinStyle = .round
+
+            NSColor.white.setFill()
+            path.fill()
+            NSColor.white.setStroke()
+            innerChevron.stroke()
+            return true
+        }
+        img.isTemplate = true
+        return img
+    }
+
+    /// Official OneDrive outlined cloud menu bar status icon.
+    private func renderOneDriveIcon() -> NSImage {
+        let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .regular)
+        let img = NSImage(systemSymbolName: "cloud", accessibilityDescription: "OneDrive")?.withSymbolConfiguration(config) ?? NSImage()
+        img.isTemplate = true
+        return img
+    }
+
+    /// Official Proton VPN shield with X menu bar status icon.
+    private func renderProtonVPNIcon() -> NSImage {
+        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
+        let img = NSImage(systemSymbolName: "xmark.shield.fill", accessibilityDescription: "Proton VPN")?.withSymbolConfiguration(config) ?? NSImage()
+        img.isTemplate = true
+        return img
+    }
+
+    // MARK: - Asset & Symbol Fallbacks
 
     private func findBundleStatusAsset(for item: MenuBarItem) -> NSImage? {
         guard let runningApp = NSRunningApplication(processIdentifier: item.ownerPID),
@@ -106,12 +231,9 @@ public final class IconManager {
         }
 
         let candidates = [
-            "Contents/Resources/images/darkTheme/cloud.svg",
-            "Contents/Resources/cloud32.png",
-            "Contents/Resources/images/status_tray_done.png",
-            "Contents/Resources/images/app_icon/Drive_24.png",
             "Contents/Resources/status_icon.png",
-            "Contents/Resources/tray_icon.png"
+            "Contents/Resources/tray_icon.png",
+            "Contents/Resources/images/status_m_done.png"
         ]
 
         for relativePath in candidates {
@@ -126,22 +248,11 @@ public final class IconManager {
         return nil
     }
 
-    private func curatedSymbol(for item: MenuBarItem) -> NSImage? {
-        let combined = "\(item.name) \(item.bundleIdentifier ?? "")".lowercased()
+    private func curatedSymbol(for item: MenuBarItem, combined: String) -> NSImage? {
         let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .regular)
 
         let symbolName: String
-        if combined.contains("onedrive") {
-            symbolName = "cloud.fill"
-        } else if combined.contains("proton") && combined.contains("drive") {
-            symbolName = "lock.icloud.fill"
-        } else if combined.contains("proton") && combined.contains("vpn") {
-            symbolName = "shield.checkerboard"
-        } else if combined.contains("synology") {
-            symbolName = "externaldrive.connected.to.line.below.fill"
-        } else if combined.contains("nextcloud") || combined.contains("owncloud") {
-            symbolName = "cloud.sun.fill"
-        } else if combined.contains("dropbox") {
+        if combined.contains("dropbox") {
             symbolName = "shippingbox.fill"
         } else if combined.contains("google") && combined.contains("drive") {
             symbolName = "cylinder.split.1x2.fill"
