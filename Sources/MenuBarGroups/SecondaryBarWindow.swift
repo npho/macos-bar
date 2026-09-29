@@ -159,6 +159,14 @@ public final class SecondaryBarWindow: NSPanel {
         button.wantsLayer = true
         button.layer?.cornerRadius = 6
 
+        if IconManager.shared.useLiveScreenCapture {
+            Task { @MainActor [weak button] in
+                if let liveImage = await IconManager.shared.captureLiveIcon(for: item) {
+                    button?.image = liveImage
+                }
+            }
+        }
+
         objc_setAssociatedObject(button, "menuBarItem", item, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
 
         button.translatesAutoresizingMaskIntoConstraints = false

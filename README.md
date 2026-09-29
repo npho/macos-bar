@@ -68,7 +68,7 @@ Menu Bar Groups respects macOS security and privacy boundaries:
 
 - **Accessibility** (Required for menu activation): Needed to inspect `AXExtrasMenuBar` for sandboxed apps and trigger menu actions (`kAXPressAction` / event dispatch).
   - Open **System Settings → Privacy & Security → Accessibility** to enable.
-- **Screen Recording** (Optional): Used solely in-memory by ScreenCaptureKit to snapshot live status icons with Retina fidelity. If not granted, Menu Bar Groups gracefully falls back to high-resolution application icons.
+- **Screen Recording** (Optional, Opt-In): Menu Bar Groups operates completely permissionless by default, resolving monochrome menu bar assets and template symbols directly from application bundles on disk without any screen capture. If you opt into live icon mirroring in Settings, ScreenCaptureKit is used solely in-memory to snapshot dynamic status items (such as live CPU graphs or animated sync spinners).
 
 ---
 

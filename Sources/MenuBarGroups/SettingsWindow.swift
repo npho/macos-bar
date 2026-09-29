@@ -12,6 +12,7 @@ public final class SettingsWindowController: NSWindowController, NSTableViewData
     private let addItemPopUp = NSPopUpButton(frame: .zero, pullsDown: false)
     private let launchAtLoginCheckbox = NSButton(checkboxWithTitle: "Launch at login", target: nil, action: nil)
     private let concealCheckbox = NSButton(checkboxWithTitle: "Conceal grouped items in menu bar (camouflages original icons)", target: nil, action: nil)
+    private let liveCaptureCheckbox = NSButton(checkboxWithTitle: "Live icon mirroring (opt-in; uses Screen Recording for dynamic icons)", target: nil, action: nil)
     private let accessibilityStatusLabel = NSTextField(labelWithString: "")
     private let screenRecordingStatusLabel = NSTextField(labelWithString: "")
 
@@ -176,6 +177,10 @@ public final class SettingsWindowController: NSWindowController, NSTableViewData
         concealCheckbox.action = #selector(toggleConcealmentSetting(_:))
         concealCheckbox.state = CurtainOverlayManager.shared.isEnabled ? .on : .off
 
+        liveCaptureCheckbox.target = self
+        liveCaptureCheckbox.action = #selector(toggleLiveCaptureSetting(_:))
+        liveCaptureCheckbox.state = IconManager.shared.useLiveScreenCapture ? .on : .off
+
         let shortcutHeading = NSTextField(labelWithString: "Global Shortcuts")
         shortcutHeading.font = .boldSystemFont(ofSize: 13)
 
@@ -195,6 +200,7 @@ public final class SettingsWindowController: NSWindowController, NSTableViewData
         stack.addArrangedSubview(launchAtLoginCheckbox)
         stack.addArrangedSubview(behaviorHeading)
         stack.addArrangedSubview(concealCheckbox)
+        stack.addArrangedSubview(liveCaptureCheckbox)
         stack.addArrangedSubview(shortcutHeading)
         stack.addArrangedSubview(shortcutLabel)
         stack.addArrangedSubview(permissionsHeading)
@@ -217,6 +223,13 @@ public final class SettingsWindowController: NSWindowController, NSTableViewData
     @objc private func toggleConcealmentSetting(_ sender: NSButton) {
         CurtainOverlayManager.shared.isEnabled = (sender.state == .on)
         GroupManager.shared.refreshConcealmentOverlays()
+    }
+
+    @objc private func toggleLiveCaptureSetting(_ sender: NSButton) {
+        if sender.state == .on && !CGPreflightScreenCaptureAccess() {
+            _ = CGRequestScreenCaptureAccess()
+        }
+        IconManager.shared.useLiveScreenCapture = (sender.state == .on)
     }
 
     private func updatePermissionLabels() {
@@ -263,6 +276,7 @@ public final class SettingsWindowController: NSWindowController, NSTableViewData
             groupTableView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
         }
         concealCheckbox.state = CurtainOverlayManager.shared.isEnabled ? .on : .off
+        liveCaptureCheckbox.state = IconManager.shared.useLiveScreenCapture ? .on : .off
         refreshItemsView()
         updatePermissionLabels()
     }
