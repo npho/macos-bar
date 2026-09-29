@@ -18,8 +18,8 @@ public final class MenuBarScanner {
         // 1. CoreGraphics window inspection
         let cgItems = scanCoreGraphicsStatusWindows(currentPID: currentPID)
 
-        // 2. Accessibility extras inspection (if granted)
-        let axItems = AXIsProcessTrusted() ? scanAccessibilityExtras(currentPID: currentPID) : []
+        // 2. Accessibility extras inspection
+        let axItems = scanAccessibilityExtras(currentPID: currentPID)
 
         // 3. Merge & Deduplicate
         var mergedByOwner: [String: [MenuBarItem]] = [:]
@@ -113,6 +113,7 @@ public final class MenuBarScanner {
         for app in runningApps {
             let pid = app.processIdentifier
             let appElement = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(appElement, 0.05)
 
             var barRef: CFTypeRef?
             guard AXUIElementCopyAttributeValue(appElement, "AXExtrasMenuBar" as CFString, &barRef) == .success,

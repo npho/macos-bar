@@ -9,10 +9,17 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$ROOT/.build/release/MenuBarGroups" "$APP/Contents/MacOS/"
 cp "$ROOT/Info.plist" "$APP/Contents/Info.plist"
-# A stable development certificate keeps the app's signing identity consistent
-# across rebuilds, so macOS privacy permissions can follow the same app. Without
-# it, keep the existing ad-hoc local build for machines without a certificate.
-if [[ -n "${MENU_BAR_GROUPS_SIGN_IDENTITY:-}" ]]; then
-    codesign --force --sign "$MENU_BAR_GROUPS_SIGN_IDENTITY" --identifier com.example.MenuBarGroups "$APP"
+
+# Auto-detect Apple Development identity from keychain if not explicitly set
+SIGN_IDENTITY="${MENU_BAR_GROUPS_SIGN_IDENTITY:-}"
+if [[ -z "$SIGN_IDENTITY" ]]; then
+    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -n 1 | awk '{print $2}' || true)
+fi
+
+if [[ -n "$SIGN_IDENTITY" ]]; then
+    echo "Signing with stable identity: $SIGN_IDENTITY"
+    codesign --force --sign "$SIGN_IDENTITY" --identifier com.example.MenuBarGroups "$APP"
+else
+    echo "No Apple Development identity found; leaving ad-hoc signature."
 fi
 echo "Built: $APP"
