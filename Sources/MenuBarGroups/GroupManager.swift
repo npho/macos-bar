@@ -7,17 +7,12 @@ public final class GroupManager {
     public static let shared = GroupManager()
 
     public private(set) var groups: [MenuBarGroup] = []
-    public private(set) var isCollapsed: Bool = false
 
     private var groupStatusItems: [UUID: NSStatusItem] = [:]
     private var mainStatusItem: NSStatusItem?
-    private var separatorStatusItem: NSStatusItem?
-    private var spacerStatusItem: NSStatusItem?
-    private var autoRehideTask: Task<Void, Never>?
 
     private let secondaryBar = SecondaryBarWindow()
     private let defaultsKey = "com.example.MenuBarGroups.groups"
-    private let collapsedKey = "com.example.MenuBarGroups.isCollapsed"
 
     private init() {
         loadGroups()
@@ -26,7 +21,6 @@ public final class GroupManager {
     public func start() {
         setupMainStatusItem()
         setupGroupStatusItems()
-        setupSectionHidingItems()
 
         // Register global hotkey for Command Bar (⌘⇧Space)
         HotKeyManager.shared.register {
@@ -37,7 +31,6 @@ public final class GroupManager {
     // MARK: - Persistence & Setup
 
     private func loadGroups() {
-        isCollapsed = UserDefaults.standard.bool(forKey: collapsedKey)
         if let data = UserDefaults.standard.data(forKey: defaultsKey),
            let saved = try? JSONDecoder().decode([MenuBarGroup].self, from: data) {
             groups = saved
@@ -75,76 +68,6 @@ public final class GroupManager {
 
         groups = [storageGroup, utilitiesGroup]
         saveGroups()
-    }
-
-    // MARK: - Section Hiding & Spacer
-
-    private func setupSectionHidingItems() {
-        if separatorStatusItem == nil {
-            separatorStatusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        }
-        if spacerStatusItem == nil {
-            spacerStatusItem = NSStatusBar.system.statusItem(withLength: 0)
-        }
-
-        updateSeparatorButton()
-        applyHidingState()
-    }
-
-    private func updateSeparatorButton() {
-        guard let button = separatorStatusItem?.button else { return }
-        let config = NSImage.SymbolConfiguration(pointSize: 11, weight: .semibold)
-        let symbolName = isCollapsed ? "chevron.right" : "chevron.left"
-        button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Menu Bar Divider")?.withSymbolConfiguration(config)
-        button.toolTip = isCollapsed
-            ? "Show hidden menu bar items (⌘-drag items to the left of this arrow to hide them)"
-            : "Hide menu bar items to the left of this arrow"
-        button.target = self
-        button.action = #selector(separatorClicked)
-    }
-
-    @objc private func separatorClicked() {
-        toggleHiding()
-    }
-
-    public func toggleHiding() {
-        isCollapsed.toggle()
-        UserDefaults.standard.set(isCollapsed, forKey: collapsedKey)
-        updateSeparatorButton()
-        applyHidingState()
-    }
-
-    private func applyHidingState() {
-        guard let spacer = spacerStatusItem else { return }
-        if isCollapsed {
-            let screenWidth = (NSScreen.main?.frame.width ?? 1440) + 400
-            spacer.length = screenWidth
-        } else {
-            spacer.length = 0
-        }
-    }
-
-    /// Activates an item from the sub-bar, momentarily revealing it if collapsed so macOS displays its menu.
-    public func activateItemFromSubBar(_ item: MenuBarItem) {
-        if isCollapsed {
-            spacerStatusItem?.length = 0
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(75))
-                let rescanned = MenuBarScanner.shared.scan()
-                let target = rescanned.first(where: { $0.id == item.id }) ?? item
-                InteractionEngine.shared.activate(item: target)
-
-                autoRehideTask?.cancel()
-                autoRehideTask = Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(5))
-                    if self.isCollapsed {
-                        self.applyHidingState()
-                    }
-                }
-            }
-        } else {
-            InteractionEngine.shared.activate(item: item)
-        }
     }
 
     // MARK: - Item Resolution
@@ -190,15 +113,6 @@ public final class GroupManager {
 
     @objc private func mainStatusItemClicked() {
         let menu = NSMenu()
-
-        let toggleHidingItem = NSMenuItem(
-            title: isCollapsed ? "Show Hidden Menu Bar Items" : "Hide Menu Bar Items",
-            action: #selector(toggleHidingAction),
-            keyEquivalent: "\\"
-        )
-        toggleHidingItem.target = self
-        menu.addItem(toggleHidingItem)
-
         let commandBarItem = NSMenuItem(title: "Command Bar…", action: #selector(openCommandBar), keyEquivalent: " ")
         commandBarItem.keyEquivalentModifierMask = [.command, .shift]
         commandBarItem.target = self
@@ -227,10 +141,6 @@ public final class GroupManager {
         mainStatusItem?.menu = menu
         mainStatusItem?.button?.performClick(nil)
         mainStatusItem?.menu = nil
-    }
-
-    @objc private func toggleHidingAction() {
-        toggleHiding()
     }
 
     @objc private func openCommandBar() {
@@ -303,8 +213,8 @@ public final class GroupManager {
             group: group,
             items: matchingItems,
             allAvailableItems: allScanned,
-            onSelect: { [weak self] selectedItem in
-                self?.activateItemFromSubBar(selectedItem)
+            onSelect: { selectedItem in
+                InteractionEngine.shared.activate(item: selectedItem)
             },
             onToggleItem: { [weak self, weak button] itemID in
                 guard let self, let button else { return }
