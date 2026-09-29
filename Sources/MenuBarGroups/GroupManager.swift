@@ -74,21 +74,36 @@ public final class GroupManager {
 
     // MARK: - Item Resolution
 
-    /// Resolves all items belonging to a group, taking auto-tracking into account.
+    /// Resolves all items belonging to a group, taking auto-tracking into account
+    /// while preserving a static, deterministic item order across interactions.
     public func resolvedItems(for group: MenuBarGroup, allScanned: [MenuBarItem]) -> [MenuBarItem] {
         var items: [MenuBarItem] = []
         var seenIDs = Set<String>()
+        var targetOrder = group.itemIDs
 
+        // If auto-tracking is enabled, dynamically register new discovered items
+        // while preserving the fixed, static positions of existing items.
         if group.autoTrackCategory == .storage {
-            for item in allScanned {
-                if KnownApps.isStorageApp(bundleID: item.bundleIdentifier, name: item.name) {
-                    items.append(item)
-                    seenIDs.insert(item.id)
+            let matchingStorage = allScanned
+                .filter { KnownApps.isStorageApp(bundleID: $0.bundleIdentifier, name: $0.name) }
+                .sorted { ($0.bundleIdentifier ?? $0.name) < ($1.bundleIdentifier ?? $1.name) }
+
+            var didAdd = false
+            for item in matchingStorage {
+                if !targetOrder.contains(item.id) {
+                    targetOrder.append(item.id)
+                    didAdd = true
                 }
+            }
+
+            if didAdd, let idx = groups.firstIndex(where: { $0.id == group.id }) {
+                groups[idx].itemIDs = targetOrder
+                saveGroups()
             }
         }
 
-        for itemID in group.itemIDs {
+        // Return items strictly adhering to targetOrder so positions remain static
+        for itemID in targetOrder {
             if !seenIDs.contains(itemID), let item = allScanned.first(where: { $0.id == itemID }) {
                 items.append(item)
                 seenIDs.insert(itemID)
@@ -97,6 +112,7 @@ public final class GroupManager {
 
         return items
     }
+
 
     // MARK: - Primary Status Item
 

@@ -43,8 +43,9 @@ public final class MenuBarScanner {
             }
         }
 
-        // Normalize ordinals and assemble final list
-        for (owner, ownerItems) in mergedByOwner {
+        // Normalize ordinals and assemble final list in deterministic order
+        for owner in mergedByOwner.keys.sorted() {
+            let ownerItems = mergedByOwner[owner] ?? []
             // Sort items belonging to the same app left-to-right
             let sorted = ownerItems.sorted { $0.frame.minX < $1.frame.minX }
             for (index, item) in sorted.enumerated() {
@@ -63,8 +64,13 @@ public final class MenuBarScanner {
             }
         }
 
-        // Sort items spatially by their x position across the menu bar
-        return items.sorted { $0.frame.minX < $1.frame.minX }
+        // Sort items spatially across the menu bar, breaking ties deterministically
+        return items.sorted {
+            if abs($0.frame.minX - $1.frame.minX) > 1.0 {
+                return $0.frame.minX < $1.frame.minX
+            }
+            return ($0.bundleIdentifier ?? $0.name) < ($1.bundleIdentifier ?? $1.name)
+        }
     }
 
     private func scanCoreGraphicsStatusWindows(currentPID: pid_t) -> [MenuBarItem] {

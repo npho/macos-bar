@@ -32,6 +32,20 @@ public final class SecondaryBarWindow: NSPanel {
         setupView()
     }
 
+    public override var canBecomeKey: Bool {
+        return true
+    }
+}
+
+/// Custom button that accepts mouse clicks even when its panel is not key.
+final class FirstMouseButton: NSButton {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        return true
+    }
+}
+
+extension SecondaryBarWindow {
+
     private func setupView() {
         visualEffectView.material = .popover
         visualEffectView.blendingMode = .behindWindow
@@ -111,7 +125,7 @@ public final class SecondaryBarWindow: NSPanel {
         }
 
         // 3. Quick "+" Add Button
-        let addButton = NSButton(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
+        let addButton = FirstMouseButton(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
         addButton.bezelStyle = .inline
         addButton.title = "+"
         addButton.font = .systemFont(ofSize: 14, weight: .medium)
@@ -126,7 +140,7 @@ public final class SecondaryBarWindow: NSPanel {
         stackView.addArrangedSubview(addButton)
 
         // 4. Group Options "•••" Button
-        let optionsButton = NSButton(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
+        let optionsButton = FirstMouseButton(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
         optionsButton.bezelStyle = .inline
         optionsButton.title = "•••"
         optionsButton.font = .systemFont(ofSize: 11, weight: .regular)
@@ -146,7 +160,7 @@ public final class SecondaryBarWindow: NSPanel {
     }
 
     private func createItemButton(for item: MenuBarItem) -> NSButton {
-        let button = NSButton(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
+        let button = FirstMouseButton(frame: NSRect(x: 0, y: 0, width: 28, height: 28))
         button.isBordered = false
         button.image = IconManager.shared.icon(for: item)
         button.imageScaling = .scaleProportionallyDown

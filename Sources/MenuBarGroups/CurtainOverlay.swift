@@ -179,6 +179,25 @@ public final class CurtainOverlayManager {
         }
     }
 
+    private var isTemporarilyHidden = false
+
+    /// Temporarily orders out all concealment overlay panels so targeted clicks land directly on underlying status items.
+    public func temporarilyHide(duration: TimeInterval = 0.5) {
+        isTemporarilyHidden = true
+        for panels in panelsByGroup.values {
+            for panel in panels {
+                panel.orderOut(nil)
+            }
+        }
+        CATransaction.flush()
+        Task { @MainActor in
+            let ms = UInt64(max(0.1, duration) * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: ms)
+            self.isTemporarilyHidden = false
+            self.triggerUpdate()
+        }
+    }
+
     /// Updates concealment overlay masks for the given groups and scanned items.
     public func update(
         groups: [MenuBarGroup],
@@ -186,8 +205,12 @@ public final class CurtainOverlayManager {
         onSummonGroup: @escaping (UUID) -> Void,
         onContextMenu: @escaping (UUID, NSPoint) -> Void
     ) {
-        guard isEnabled else {
-            removeAll()
+        guard isEnabled && !isTemporarilyHidden else {
+            if !isEnabled || isTemporarilyHidden {
+                for panels in panelsByGroup.values {
+                    panels.forEach { $0.orderOut(nil) }
+                }
+            }
             return
         }
 
